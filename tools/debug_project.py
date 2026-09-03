@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, dependency-free diagnostics for the School Work Planner repository."""
+"""Dependency-light diagnostics for the Python School Work Planner."""
 
 from __future__ import annotations
 
@@ -12,33 +12,28 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 
-REQUIRED_FILES = (
-    "package.json",
-    "client/src/App.tsx",
-    "client/src/pages/Home.tsx",
-    "server/routers.ts",
-    "server/db.ts",
-    "drizzle/schema.ts",
-)
+def check_required_files(root: Path) -> tuple[bool, str]:
+    required = [root / "app.py", root / "requirements.txt", root / "README.md"]
+    missing = [str(path.relative_to(root)) for path in required if not path.is_file()]
+    return not missing, "all present" if not missing else "missing: " + ", ".join(missing)
 
 
-def run(command: list[str], root: Path) -> tuple[bool, str]:
-    """Run a project command and return success plus a short output summary."""
+def check_python_files(root: Path) -> tuple[bool, str]:
+    files = [root / "app.py", root / "tools" / "debug_project.py"]
     try:
-        result = subprocess.run(
-            command,
-            cwd=root,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
+        for file in files:
+            compile(file.read_text(encoding="utf-8"), str(file), "exec")
+    except (OSError, SyntaxError) as error:
         return False, str(error)
-    output = result.stdout.strip().splitlines()
-    summary = output[-1] if output else "No command output"
-    return result.returncode == 0, summary
+    return True, "Python syntax is valid"
+
+
+def check_requirements(root: Path) -> tuple[bool, str]:
+    try:
+        requirements = (root / "requirements.txt").read_text(encoding="utf-8").lower()
+    except OSError as error:
+        return False, str(error)
+    return "flask" in requirements, "Flask dependency found" if "flask" in requirements else "Flask dependency missing"
 
 
 def check_url(url: str) -> tuple[bool, str]:
@@ -50,47 +45,31 @@ def check_url(url: str) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run diagnostics for the School Work Planner.")
+    parser = argparse.ArgumentParser(description="Run diagnostics for the Flask School Work Planner.")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--url", help="Optional running app URL to check, e.g. http://localhost:3000")
-    parser.add_argument("--skip-build", action="store_true", help="Skip the production build to run diagnostics faster")
+    parser.add_argument("--url", help="Optional running Flask URL, for example http://localhost:5000")
     args = parser.parse_args()
     root = args.root.resolve()
 
-    checks: list[dict[str, object]] = []
-    missing = [path for path in REQUIRED_FILES if not (root / path).is_file()]
-    checks.append({"name": "required files", "passed": not missing, "detail": "all present" if not missing else ", ".join(missing)})
-
-    package_path = root / "package.json"
-    package_ok = False
-    if package_path.is_file():
-        try:
-            package = json.loads(package_path.read_text(encoding="utf-8"))
-            package_ok = package.get("scripts", {}).get("check") == "tsc --noEmit"
-        except (OSError, json.JSONDecodeError):
-            package_ok = False
-    checks.append({"name": "package configuration", "passed": package_ok, "detail": "TypeScript check script found" if package_ok else "package.json is invalid or incomplete"})
-
-    for label, command in (("TypeScript", ["pnpm", "check"]), ("tests", ["pnpm", "test"])):
-        passed, detail = run(command, root)
-        checks.append({"name": label, "passed": passed, "detail": detail})
-
-    if not args.skip_build:
-        passed, detail = run(["pnpm", "build"], root)
-        checks.append({"name": "production build", "passed": passed, "detail": detail})
-
+    checks = [
+        ("required files", *check_required_files(root)),
+        ("Python syntax", *check_python_files(root)),
+        ("requirements", *check_requirements(root)),
+    ]
     if args.url:
-        passed, detail = check_url(args.url)
-        checks.append({"name": f"preview {args.url}", "passed": passed, "detail": detail})
+        checks.append((f"preview {args.url}", *check_url(args.url)))
 
-    for check in checks:
-        marker = "PASS" if check["passed"] else "FAIL"
-        print(f"[{marker}] {check['name']}: {check['detail']}")
-
-    failed = sum(not bool(check["passed"]) for check in checks)
+    for name, passed, detail in checks:
+        print(f"[{'PASS' if passed else 'FAIL'}] {name}: {detail}")
+    failed = sum(not passed for _, passed, _ in checks)
     print(f"\n{len(checks) - failed}/{len(checks)} checks passed")
     return 1 if failed else 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# Keep json imported for compatibility with simple debugger snippets that load
+# the app's assignments.json while stepping through a local session.
+assert json
