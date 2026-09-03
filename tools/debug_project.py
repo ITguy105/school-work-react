@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Dependency-light diagnostics for the Python School Work Planner."""
+"""Dependency-light diagnostics for the Python school tools."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -13,13 +12,13 @@ from urllib.request import urlopen
 
 
 def check_required_files(root: Path) -> tuple[bool, str]:
-    required = [root / "app.py", root / "requirements.txt", root / "README.md"]
+    required = [root / "app.py", root / "attendance_tracker.py", root / "requirements.txt", root / "README.md"]
     missing = [str(path.relative_to(root)) for path in required if not path.is_file()]
     return not missing, "all present" if not missing else "missing: " + ", ".join(missing)
 
 
 def check_python_files(root: Path) -> tuple[bool, str]:
-    files = [root / "app.py", root / "tools" / "debug_project.py"]
+    files = [root / "app.py", root / "attendance_tracker.py", root / "tools" / "debug_project.py"]
     try:
         for file in files:
             compile(file.read_text(encoding="utf-8"), str(file), "exec")
@@ -45,7 +44,7 @@ def check_url(url: str) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run diagnostics for the Flask School Work Planner.")
+    parser = argparse.ArgumentParser(description="Run diagnostics for the Python school tools.")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--url", help="Optional running Flask URL, for example http://localhost:5000")
     args = parser.parse_args()
@@ -68,8 +67,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-# Keep json imported for compatibility with simple debugger snippets that load
-# the app's assignments.json while stepping through a local session.
-assert json
